@@ -1,11 +1,25 @@
-#!/usr/bin/env bash
-# quorum-probe: ask every configured panel model to say OK (90 s cap each) and list the ones that did not.
-here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; . "$here/quorum-lib.sh"
-cfg="$(quorum_config)" || { echo "no quorum.json found" >&2; exit 2; }
-tmp="$(mktemp -d)"; echo "Reply with exactly: OK" > "$tmp/p.md"
-while IFS=$'\t' read -r provider model; do
-  ( "$here/quorum-ask" "$provider" "$model" low probe "$tmp/p.md" "$tmp/$provider-$model.out" >/dev/null 2>&1
-    if grep -q "OK" "$tmp/$provider-$model.out" 2>/dev/null; then echo "up   $provider/$model"; else echo "DOWN $provider/$model"; fi ) &
-done < <(python3 -c 'import json,sys
-for e in json.load(open(sys.argv[1])).get("panel",[]): print(e["provider"]+"\t"+e["model"])' "$cfg")
-wait; "$here/quorum-cleanup" >/dev/null; rm -rf "$tmp"
+#!/usr/bin/env python3
+"""quorum-probe: ask every panel model (and nothing else) to reply exactly OK, in parallel, with a 90 s cap each.
+Prints up/DOWN per model. A model is up only if the runner exited 0 and the last non-empty output line is exactly OK."""
+import concurrent.futures, os, re, subprocess, sys, tempfile
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import quorum_lib as q
+cfg = q.load_json(q.find_config())
+panel = cfg.get("panel", [])
+d = tempfile.mkdtemp(prefix="quorum-probe-")
+prompt = os.path.join(d, "p.md"); open(prompt, "w").write("Reply with exactly: OK\n")
+def probe(i_e):
+    i, e = i_e
+    out = os.path.join(d, f"{i}.out")
+    env = dict(os.environ, QUORUM_TIMEOUT="90")
+    rc = subprocess.run([os.path.join(q.HERE, "quorum-ask"), e["provider"], e["model"], "low", "probe", prompt, out],
+                        env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
+    lines = [l.strip() for l in open(out, errors="replace").read().splitlines() if l.strip()] if os.path.exists(out) else []
+    ok = rc == 0 and lines and re.sub(r"\x1b\[[0-9;]*m", "", lines[-1]) == "OK"
+    return f"{'up  ' if ok else 'DOWN'} {e['provider']}/{e['model']}"
+results = []
+with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(panel))) as ex:
+    for line in ex.map(probe, enumerate(panel)): print(line); results.append(line)
+need = int(cfg.get("limits", {}).get("minPanelSize", 3)); up = sum(1 for r in results if r.startswith("up"))
+if up < need: print(f"WARNING: only {up} panel model(s) up, quorum needs {need}; add providers/models to 'panel'")
+import shutil; shutil.rmtree(d, ignore_errors=True)

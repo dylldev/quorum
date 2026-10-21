@@ -1,27 +1,43 @@
-#!/usr/bin/env bash
-# quorum-ask <provider> <model> <effort|-> <tag> <prompt-file> <out-file> [workdir]
-# Runs ONE model through the command template in your quorum.json. Vendor-neutral: the provider is just config.
-set -uo pipefail
-here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "$here/quorum-lib.sh"
-provider="${1:?provider}"; model="${2:?model}"; effort="${3:--}"; tag="${4:?tag}"; prompt="${5:?prompt file}"; out="${6:?out file}"; workdir="${7:-$PWD}"
-cfg="$(quorum_config)" || { echo "quorum: no config found (copy quorum.example.json to ~/.config/quorum/quorum.json)" >&2; exit 2; }
-catalog="$here/../providers.catalog.json"
-# A provider is read from your config first, then from the built-in catalog (so `groq` or `gemini-api` work with no setup).
-pget() { local v; v="$(quorum_get "$cfg" ".providers[\"$provider\"].$1")"; [ -z "$v" ] && [ -f "$catalog" ] && v="$(quorum_get "$catalog" ".providers[\"$provider\"].$1")"; printf '%s' "$v"; }
-tpl="$(pget run)"; [ -n "$tpl" ] || { echo "quorum: unknown provider $provider (not in your config or providers.catalog.json)" >&2; exit 2; }
-free_only="$(pget freeOnly)"
-match="$(pget freeNameMatch)"
-if [ "$free_only" = "true" ] && [ -n "$match" ] && ! printf '%s' "$model" | grep -Eq -- "$match"; then
-  echo "quorum: provider $provider is free-only and '$model' does not match /$match/; refusing" >&2; exit 3
-fi
-needs_empty="$(pget needsEmptyDir)"
-timeout_s="$(quorum_get "$cfg" ".limits.timeoutSeconds")"; timeout_s="${timeout_s:-900}"
-cmd="${tpl//\{model\}/$model}"; cmd="${cmd//\{effort\}/$effort}"; cmd="${cmd//\{tag\}/$tag-$$}"
-cmd="${cmd//\{prompt\}/$prompt}"; cmd="${cmd//\{out\}/$out}"; cmd="${cmd//\{bin\}/$here}"; cmd="${cmd//\{bin\}/$here}"
-if [ "$needs_empty" = "true" ]; then workdir="$(mktemp -d)"; trap 'rm -rf "$workdir"' EXIT; fi
-( cd "$workdir" && perl -e 'alarm shift; exec @ARGV' "$timeout_s" bash -c "$cmd" )
-rc=$?
-after="$(pget afterRun)"
-if [ -n "$after" ]; then a="${after//\{tag\}/$tag-$$}"; bash -c "$a" >/dev/null 2>&1 || true; fi
-exit $rc
+#!/usr/bin/env python3
+"""quorum-ask <provider> <model> <effort|-> <tag> <prompt-file> <out-file> [workdir]
+Runs ONE model through the command template in your quorum.json (or the built-in catalog).
+Values reach the command as environment variables, never as shell source. The output file is private (0600).
+Env: QUORUM_TIMEOUT overrides the configured timeout (seconds)."""
+import os, sys, tempfile, shutil
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import quorum_lib as q
+
+def main():
+    if len(sys.argv) not in (7, 8): sys.exit(__doc__)
+    provider, model, effort, tag, prompt, out = sys.argv[1:7]
+    workdir = sys.argv[7] if len(sys.argv) == 8 else os.getcwd()
+    for label, val, rx in (("model", model, q.SAFE_NAME), ("effort", effort, q.SAFE_NAME), ("tag", tag, q.SAFE_TAG)):
+        if val == "-" and label == "effort": continue
+        if not rx.match(val): q.die(f"refusing unsafe {label}: {val!r}", 3)
+    prompt, out = os.path.abspath(prompt), os.path.abspath(out)
+    if not os.path.isfile(prompt): q.die(f"prompt file not found: {prompt}")
+    cfg = q.load_json(q.find_config())
+    pcfg = q.providers(cfg).get(provider)
+    if not isinstance(pcfg, dict) or not isinstance(pcfg.get("run"), str): q.die(f"unknown or invalid provider {provider!r}")
+    if not q.free_ok(pcfg, model): q.die(f"provider {provider} is free-only and {model!r} does not match its free-name filter; refusing", 3)
+    timeout = int(os.environ.get("QUORUM_TIMEOUT") or cfg.get("limits", {}).get("timeoutSeconds", 900))
+    tmpdir = None
+    if pcfg.get("needsEmptyDir"):
+        tmpdir = tempfile.mkdtemp(prefix="quorum-"); workdir = tmpdir
+    elif not os.path.isdir(workdir): q.die(f"workdir not found: {workdir}")
+    full_tag = f"{tag}-{os.getpid()}"
+    env = dict(os.environ, QUORUM_MODEL=model, QUORUM_EFFORT=effort, QUORUM_TAG=full_tag, QUORUM_PROMPT=prompt,
+               QUORUM_OUT=out, QUORUM_BIN=q.HERE)
+    old = os.umask(0o077)                                    # outputs and anything the runner creates are private
+    try:
+        if os.path.islink(out): os.unlink(out)
+        rc = q.run_limited(q.shell_template(pcfg["run"]), env, workdir, timeout)
+        after = pcfg.get("afterRun")
+        if isinstance(after, str): q.run_limited(q.shell_template(after), env, workdir, 60)
+    finally:
+        os.umask(old)
+        if tmpdir: shutil.rmtree(tmpdir, ignore_errors=True)
+    if rc == 124: print(f"quorum: {provider}/{model} timed out after {timeout}s", file=sys.stderr)
+    sys.exit(rc)
+
+main()

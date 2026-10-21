@@ -8,8 +8,8 @@ description: Use for any non-trivial request (feature, fix, audit, merge, releas
 One model can be confidently wrong. Several different models, checked against the real code, are much harder to fool. This skill is a procedure plus three small scripts (`quorum-ask`, `quorum-probe`, `quorum-cleanup`, in the plugin's `bin/`).
 
 ## Setup (once)
-Copy `quorum.example.json` to `~/.config/quorum/quorum.json` (or `./quorum.json`). It has three parts:
-- **providers**: a command template per model runner (`{model} {effort} {prompt} {out} {tag}` are filled in). Add any CLI: Codex, opencode, `claude -p`, ollama, llama.cpp, a curl wrapper. `freeOnly` plus `freeNameMatch` refuses anything that is not free, if you want a hard no-spend rule.
+Copy `quorum.example.json` to `~/.config/quorum/quorum.json` (a project `./quorum.json` is only read with `QUORUM_TRUST_PROJECT=1`). It has three parts:
+- **providers**: a command template per model runner (`{model} {effort} {prompt} {out} {tag}` are filled in). Add any CLI: Codex, opencode, `claude -p`, ollama, llama.cpp, a curl wrapper. `freeOnly` plus `freeNameMatch` refuses models whose whole name does not match (a naming filter, not a billing guarantee).
 - **moments**: which model to use when (`bigDecision`, `plan`, `reviewDiff`, `quickCheck`). Put the strongest model on the rare big decisions, a solid workhorse on plans and diff reviews, a fast cheap one on quick checks.
 - **panel**: the cheap or free models, each with a role (implement, review, audit). Keep at least `limits.minPanelSize` different ones.
 
@@ -22,7 +22,7 @@ Copy `quorum.example.json` to `~/.config/quorum/quorum.json` (or `./quorum.json`
 2. **Plan with the strong model.** `quorum-ask <provider> <model> <effort> plan brief.md plan.out`, using the `plan` moment (or `bigDecision` for real architecture questions). Make your own plan too.
 3. **Agree.** Compare plans. Where they differ, send each side's reasons to the other and iterate. Write the agreed plan (decisions, order, risks, how to verify).
 4. **Panel.** Send the agreed plan to at least `minPanelSize` different panel models in parallel (one background command each): `quorum-ask <provider> <model> - <tag> plan.md out-<model>.txt <project dir>`. Say whether they may edit files; default read-only. If they write code, give each its own git worktree.
-5. **Review together.** You and the strong model check the panel's output against the real code (build, tests, diff). A claim nobody checked is "unverified". Outvote single-model claims. Loop until you and the strong model agree.
+5. **Review together.** You and the strong model check the panel's output against the real code (build, tests, diff). A claim nobody checked is "unverified". Weigh claims across models, but a lone finding that is specific and checkable still gets checked; the majority can be wrong too. Loop until you and the strong model agree.
 6. **You finish.** Tests first (red then green), real checks, plain report. Anything outward-facing (publish, push, release, delete, install, credentials) stays with you and the user.
 7. **Clean up.** `quorum-cleanup`.
 

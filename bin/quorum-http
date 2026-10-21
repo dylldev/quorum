@@ -8,7 +8,21 @@ One-shot chat call to any HTTP model API, standard library only. Formats:
   gemini     Google Generative Language API generateContent
 The API key is read from the environment variable named in <key_env> (use "-" for none). It is never printed or stored.
 """
-import json, os, sys, urllib.request, urllib.error
+import json, os, sys, urllib.parse, urllib.request, urllib.error
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Never follow redirects: they would carry the API key to whatever host the server names."""
+    def redirect_request(self, *a, **k): return None
+
+def secure_write(path, text):
+    """Private (0600) output file; refuses to write through a symlink."""
+    try: os.unlink(path) if os.path.islink(path) else None
+    except OSError: pass
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f: f.write(text)
+
+def redact(text, key):
+    return text.replace(key, "***") if key else text
 
 def main():
     if len(sys.argv) != 7:
@@ -17,12 +31,15 @@ def main():
     prompt = open(prompt_file, encoding="utf-8").read()
     key = os.environ.get(key_env, "") if key_env != "-" else ""
     if key_env != "-" and not key:
-        open(out_file, "w").write(f"quorum-http: environment variable {key_env} is empty\n"); sys.exit(4)
+        secure_write(out_file, f"quorum-http: environment variable {key_env} is empty\n"); sys.exit(4)
     if base.startswith("env:"):
         base = os.environ.get(base[4:], "")
         if not base:
-            open(out_file, "w").write("quorum-http: base URL environment variable is empty\n"); sys.exit(4)
+            secure_write(out_file, "quorum-http: base URL environment variable is empty\n"); sys.exit(4)
     base = base.rstrip("/")
+    host = urllib.parse.urlparse(base).hostname or ""
+    if key and not base.startswith("https://") and host not in ("localhost", "127.0.0.1", "::1") and os.environ.get("QUORUM_ALLOW_HTTP") != "1":
+        secure_write(out_file, "quorum-http: refusing to send an API key over plain http (set QUORUM_ALLOW_HTTP=1 to override)\n"); sys.exit(4)
     headers = {"Content-Type": "application/json"}
     if fmt == "openai":
         url = base + "/chat/completions"
@@ -43,13 +60,13 @@ def main():
         sys.exit(f"quorum-http: unknown format {fmt}")
     req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=int(os.environ.get("QUORUM_HTTP_TIMEOUT", "600"))) as resp:
+        with urllib.request.build_opener(NoRedirect).open(req, timeout=int(os.environ.get("QUORUM_HTTP_TIMEOUT", "600"))) as resp:
             text = pick(json.load(resp))
     except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8", "replace")[:500].replace(key, "***") if key else e.read().decode("utf-8", "replace")[:500]
-        open(out_file, "w").write(f"quorum-http: HTTP {e.code} {e.reason}\n{detail}\n"); sys.exit(5)
+        detail = redact(e.read().decode("utf-8", "replace"), key)[:500]
+        secure_write(out_file, f"quorum-http: HTTP {e.code} {e.reason}\n{detail}\n"); sys.exit(5)
     except Exception as e:  # network, bad JSON, missing fields
-        open(out_file, "w").write(f"quorum-http: {type(e).__name__}: {str(e)[:300]}\n"); sys.exit(6)
-    open(out_file, "w", encoding="utf-8").write(text if text.endswith("\n") else text + "\n")
+        secure_write(out_file, f"quorum-http: {type(e).__name__}: {redact(str(e), key)[:300]}\n"); sys.exit(6)
+    secure_write(out_file, text if text.endswith("\n") else text + "\n")
 
 main()

@@ -4,6 +4,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 class H(BaseHTTPRequestHandler):
     def do_POST(self):
         body=json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        if self.path.startswith("/redir"):
+            self.send_response(302); self.send_header("Location","http://127.0.0.1:9/steal"); self.end_headers(); return
         if self.path.startswith("/fail"):
             self.send_response(401); self.end_headers(); self.wfile.write(b'{"error":"bad key sekret"}'); return
         if self.path.endswith("/chat/completions"):
@@ -12,6 +14,8 @@ class H(BaseHTTPRequestHandler):
             assert self.headers["x-api-key"]=="sekret"; out={"content":[{"type":"text","text":"anthropic says "+body["messages"][0]["content"]}]}
         elif ":generateContent" in self.path:
             assert self.headers["x-goog-api-key"]=="sekret"; out={"candidates":[{"content":{"parts":[{"text":"gemini says "+body["contents"][0]["parts"][0]["text"]}]}}]}
+        elif self.path=="/redir":
+            self.send_response(302); self.send_header("Location","http://127.0.0.1:9/steal"); self.end_headers(); return
         elif self.path=="/fail":
             self.send_response(401); self.end_headers(); self.wfile.write(b'{"error":"bad key sekret"}'); return
         else:
@@ -29,5 +33,7 @@ assert run("anthropic",base)==(0,"anthropic says hi\n")
 assert run("gemini",base)==(0,"gemini says hi\n")
 assert run("openai","env:QUORUM_TEST_BASE")==(0,"openai says hi\n")                    # odd/self-hosted base via env
 rc,out=run("openai",base+"/fail-x"); assert rc==5 and "sekret" not in out, (rc,out)    # HTTP error: nonzero, key never echoed
+rc,out=run("openai",base+"/redir-x"); assert rc==5 and "sekret" not in out, (rc,out)   # redirects are never followed
+rc,out=run("openai","http://example.invalid"); assert rc==4 and "plain http" in out, (rc,out)   # no key over plain http
 rc,out=run("openai",base,"MISSING_KEY"); assert rc==4, (rc,out)                        # missing key refused before any request
 print("PASS http")

@@ -5,34 +5,70 @@
       "run": "codex exec -m {model} -c model_reasoning_effort={effort} -s read-only --ephemeral --skip-git-repo-check --disable plugins -o {out} \"$(cat {prompt})\" < /dev/null > /dev/null 2>&1",
       "freeOnly": false,
       "needsEmptyDir": true,
-      "cleanup": "find \"$HOME/.codex/.tmp/marketplaces/.staging\" -maxdepth 1 -name 'marketplace-upgrade-*' -mmin +10 -exec rm -rf {} + 2>/dev/null"
+      "cleanup": "pgrep -f 'codex exec' >/dev/null || find \"$HOME/.codex/.tmp/marketplaces/.staging\" -maxdepth 1 -name 'marketplace-upgrade-*' -mmin +30 -exec rm -rf {} + 2>/dev/null"
     },
     "opencode": {
-      "run": "opencode run -m opencode/{model} --title quorum-{tag} \"$(cat {prompt})\" > {out} 2>&1",
+      "run": "opencode run -m opencode/{model} --title quorum-{tag} \"$(cat {prompt})\" < /dev/null > {out} 2>&1",
       "freeOnly": true,
-      "freeNameMatch": "-free$",
+      "freeNameMatch": ".*-free",
       "afterRun": "id=$(opencode session list 2>/dev/null | awk -v t=quorum-{tag} '$0 ~ t {print $1; exit}'); [ -n \"$id\" ] && opencode session delete \"$id\" >/dev/null 2>&1",
-      "cleanup": "opencode session list 2>/dev/null | awk '/quorum-/ {print $1}' | while read -r id; do opencode session delete \"$id\" >/dev/null 2>&1; done"
+      "cleanup": "opencode session list 2>/dev/null | while read -r id title rest; do case \"$title\" in quorum-*-[0-9]*) pid=\"${title##*-}\"; kill -0 \"$pid\" 2>/dev/null || opencode session delete \"$id\" >/dev/null 2>&1;; esac; done"
     },
     "claude": {
       "run": "claude -p --model {model} \"$(cat {prompt})\" > {out} 2>/dev/null"
     },
     "ollama": {
       "run": "ollama run {model} < {prompt} > {out} 2>/dev/null",
-      "freeOnly": true
+      "freeOnly": true,
+      "freeNameMatch": ".+"
     }
   },
   "moments": {
-    "bigDecision":   { "provider": "codex",    "model": "gpt-6-astra",             "effort": "high" },
-    "plan":          { "provider": "codex",    "model": "gpt-6.1-sol",             "effort": "medium" },
-    "reviewDiff":    { "provider": "codex",    "model": "gpt-6.1-sol",             "effort": "high" },
-    "quickCheck":    { "provider": "codex",    "model": "gpt-6-luna",              "effort": "low" }
+    "bigDecision": {
+      "provider": "codex",
+      "model": "gpt-6-astra",
+      "effort": "high"
+    },
+    "plan": {
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "effort": "medium"
+    },
+    "reviewDiff": {
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "effort": "high"
+    },
+    "quickCheck": {
+      "provider": "codex",
+      "model": "gpt-6-luna",
+      "effort": "low"
+    }
   },
   "panel": [
-    { "provider": "opencode", "model": "minimax-m3.1-flash-free", "role": "implement" },
-    { "provider": "opencode", "model": "glm-5.3-flash-free",      "role": "review" },
-    { "provider": "opencode", "model": "nemotron-3-ultra-free",   "role": "audit" },
-    { "provider": "opencode", "model": "deepseek-v4.1-flash-free","role": "audit" }
+    {
+      "provider": "opencode",
+      "model": "minimax-m3.1-flash-free",
+      "role": "implement"
+    },
+    {
+      "provider": "opencode",
+      "model": "glm-5.3-flash-free",
+      "role": "review"
+    },
+    {
+      "provider": "opencode",
+      "model": "nemotron-3-ultra-free",
+      "role": "audit"
+    },
+    {
+      "provider": "opencode",
+      "model": "deepseek-v4.1-flash-free",
+      "role": "audit"
+    }
   ],
-  "limits": { "timeoutSeconds": 900, "minPanelSize": 3 }
+  "limits": {
+    "timeoutSeconds": 900,
+    "minPanelSize": 3
+  }
 }

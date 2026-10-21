@@ -31,11 +31,20 @@ Then copy `quorum.example.json` to `~/.config/quorum/quorum.json` and edit the p
 - **Anything odd or self-hosted:** `custom-openai` / `custom-anthropic` read the URL from `QUORUM_CUSTOM_BASE` (and the key from `QUORUM_CUSTOM_KEY`). Or add your own entry to `quorum.json`: a provider is only a command template.
 Only `codex` and `opencode` have been run by the author (`"verified": true`); the others use the vendors' documented flags and URLs, so run `quorum-probe` after adding one. `quorum-http` (standard-library Python) speaks the OpenAI, Anthropic and Gemini wire formats and is tested against a local fake server.
 
-## Why the free-only guard
-`freeOnly` + `freeNameMatch` on a provider makes `quorum-ask` refuse any model whose name does not match (for example opencode's `-free` models), so a typo can never spend money.
+## The free-only guard is a naming filter
+`freeOnly` + `freeNameMatch` makes `quorum-ask` refuse any model whose whole name does not match the pattern (opencode's `-free` models, OpenRouter's `:free`), and a `freeOnly` provider with no pattern refuses everything. It stops typos and accidental paid picks; it cannot know a provider's billing, so check pricing yourself.
+
+## Security notes
+- Model names, efforts and tags are checked against a strict character set and reach the command as environment variables, never as shell source.
+- A `./quorum.json` in a project is ignored unless you set `QUORUM_TRUST_PROJECT=1` (a config can run commands). An explicit `QUORUM_CONFIG` must exist.
+- `quorum-http` never follows redirects, refuses to send a key over plain http (except localhost), redacts the key in errors and writes private (0600) output files.
+- Timeouts kill the whole process group, so no orphaned runners keep billing.
+- CLI providers receive the prompt as a command-line argument, which other users on the machine can see in `ps`. For sensitive prompts use an HTTP provider (`quorum-http` reads the prompt from a file) or a CLI that reads stdin.
+- Cleanup only deletes things quorum created (sessions titled `quorum-<tag>-<pid>` whose process has ended; Codex marketplace clones older than 30 minutes while no `codex exec` runs).
+- macOS and Linux with bash and Python 3. Windows is not supported (use WSL).
 
 ## Config
-See `quorum.example.json`. Placeholders in a provider command: `{model} {effort} {prompt} {out} {tag}`. Optional `afterRun` and `cleanup` commands remove sessions and caches the tool leaves behind. Needs bash and python3.
+See `quorum.example.json`. Placeholders in a provider command: `{model} {effort} {prompt} {out} {tag}`. Optional `afterRun` and `cleanup` commands remove sessions and caches the tool leaves behind. Needs bash and Python 3 (no Perl).
 
 ## Test
 `bash tests/run.sh` (uses a fake provider; no network, no accounts).
