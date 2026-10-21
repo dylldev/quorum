@@ -21,12 +21,19 @@ def main():
     if not isinstance(pcfg, dict) or not isinstance(pcfg.get("run"), str): q.die(f"unknown or invalid provider {provider!r}")
     if not q.free_ok(pcfg, model): q.die(f"provider {provider} is free-only and {model!r} does not match its free-name filter; refusing", 3)
     timeout = int(os.environ.get("QUORUM_TIMEOUT") or cfg.get("limits", {}).get("timeoutSeconds", 900))
+    # Disk guard: refuse to start a run when the disk is nearly full (a full disk breaks every tool on the machine).
+    min_free = float(os.environ.get("QUORUM_MIN_FREE_GB") or cfg.get("limits", {}).get("minFreeGB", 3))
+    if q.free_gb() < min_free:
+        q.die(f"only {q.free_gb():.1f} GB free (limit {min_free:g} GB). Run quorum-doctor --fix, free some space, or lower limits.minFreeGB", 7)
+    watch = [w for w in (pcfg.get("watch") or q.load_json(q.CATALOG).get("watch", {}).get(provider, [])) if isinstance(w, str)] if os.path.isfile(q.CATALOG) else []
+    before = {w: q.dir_mb(w) for w in watch}
     tmpdir = None
+    scratch = tempfile.mkdtemp(prefix="quorum-tmp-")        # the runner's TMPDIR: anything it parks there is deleted after the run
     if pcfg.get("needsEmptyDir"):
         tmpdir = tempfile.mkdtemp(prefix="quorum-"); workdir = tmpdir
     elif not os.path.isdir(workdir): q.die(f"workdir not found: {workdir}")
     full_tag = f"{tag}-{os.getpid()}"
-    env = dict(os.environ, QUORUM_MODEL=model, QUORUM_EFFORT=effort, QUORUM_TAG=full_tag, QUORUM_PROMPT=prompt,
+    env = dict(os.environ, TMPDIR=scratch, QUORUM_MODEL=model, QUORUM_EFFORT=effort, QUORUM_TAG=full_tag, QUORUM_PROMPT=prompt,
                QUORUM_OUT=out, QUORUM_BIN=q.HERE)
     old = os.umask(0o077)                                    # outputs and anything the runner creates are private
     try:
@@ -37,6 +44,14 @@ def main():
     finally:
         os.umask(old)
         if tmpdir: shutil.rmtree(tmpdir, ignore_errors=True)
+        shutil.rmtree(scratch, ignore_errors=True)
+    # Growth watch: tell the user when a runner leaves a lot behind, and keep a log for quorum-doctor.
+    limit = float(cfg.get("limits", {}).get("growthWarnMB", 200))
+    for w, b in before.items():
+        grew = q.dir_mb(w) - b
+        if grew > 1:
+            with open(os.path.join(q.state_dir(), "growth.log"), "a") as lf: lf.write(f"{q.time.strftime('%F %T')} {provider}/{model} {w} +{grew:.0f}MB\n")
+        if grew > limit: print(f"quorum: WARNING {provider} grew {w} by {grew:.0f} MB in one run; run quorum-doctor", file=sys.stderr)
     if rc == 124: print(f"quorum: {provider}/{model} timed out after {timeout}s", file=sys.stderr)
     sys.exit(rc)
 

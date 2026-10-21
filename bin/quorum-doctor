@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+"""quorum-doctor [--fix] [--schedule]
+The universal cache check. Looks at the known leak spots listed in providers.catalog.json ("leaks") and your quorum.json
+("leaks" and "watch"), prints their sizes and what is safe to delete. Nothing is deleted without --fix.
+It only ever deletes entries that match a listed pattern, are older than the listed age, and whose tool is not running.
+--schedule prints a ready-to-install hourly job (launchd on macOS, cron elsewhere); it does not install anything."""
+import fnmatch, os, shutil, sys, time
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import quorum_lib as q
+
+def main():
+    fix = "--fix" in sys.argv
+    if "--schedule" in sys.argv:
+        exe = os.path.abspath(__file__)
+        if sys.platform == "darwin":
+            print(f'''Save as ~/Library/LaunchAgents/dev.quorum.doctor.plist, then run: launchctl load ~/Library/LaunchAgents/dev.quorum.doctor.plist
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict><key>Label</key><string>dev.quorum.doctor</string><key>ProgramArguments</key><array><string>{exe}</string><string>--fix</string></array><key>StartInterval</key><integer>3600</integer><key>RunAtLoad</key><false/></dict></plist>''')
+        else:
+            print(f"Add with `crontab -e`:\n0 * * * * {exe} --fix >/dev/null 2>&1")
+        return
+    try: cfg = q.load_json(q.find_config())
+    except SystemExit: cfg = {}
+    cat = q.load_json(q.CATALOG) if os.path.isfile(q.CATALOG) else {}
+    leaks = list(cat.get("leaks", [])) + [l for l in cfg.get("leaks", []) if isinstance(l, dict)]
+    watch = dict(cat.get("watch", {})); watch.update(cfg.get("watch", {}))
+    print(f"free disk: {q.free_gb():.1f} GB\n\nWatched folders (size only, never deleted by quorum):")
+    for tool, paths in watch.items():
+        for p in paths:
+            mb = q.dir_mb(p)
+            if mb: print(f"  {tool:9} {mb:8.0f} MB  {p}")
+    print("\nKnown leaks:")
+    freed = 0.0
+    for l in leaks:
+        base = q.expand(l["path"]); pat = l["glob"]; age = float(l.get("minAgeMinutes", 60)); skip = l.get("skipIfRunning")
+        if not os.path.isdir(base): continue
+        hits = [e for e in os.listdir(base) if fnmatch.fnmatch(e, pat)]
+        old = [e for e in hits if (time.time() - os.path.getmtime(os.path.join(base, e))) / 60 >= age]
+        mb = sum(q.dir_mb(os.path.join(base, e)) for e in old)
+        busy = bool(skip) and q.running(skip)
+        status = "skipped: tool is running" if busy and old else ("would delete" if not fix else "deleted") if old else "nothing old enough"
+        print(f"  {l['tool']:9} {len(old):3} of {len(hits):3} entries {mb:8.0f} MB  {base}/{pat}  [{status}]")
+        if fix and old and not busy:
+            for e in old:
+                shutil.rmtree(os.path.join(base, e), ignore_errors=True) if os.path.isdir(os.path.join(base, e)) else os.unlink(os.path.join(base, e))
+            freed += mb
+    log = os.path.join(q.state_dir(), "growth.log")
+    if os.path.isfile(log):
+        lines = open(log).read().splitlines()[-5:]
+        print("\nRecent runs that grew a watched folder (growth.log):"); [print("  " + l) for l in lines]
+    print(f"\n{'Freed' if fix else 'Could free'} about {freed if fix else 0:.0f} MB" + ("" if fix else "  (run with --fix to delete the entries marked 'would delete')"))
+
+main()

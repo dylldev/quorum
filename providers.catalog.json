@@ -180,5 +180,48 @@
       "note": "Anthropic-format proxy at QUORUM_CUSTOM_BASE",
       "verified": false
     }
+  },
+  "leaks": [
+    {
+      "tool": "codex",
+      "why": "Codex clones plugin marketplaces here (~0.45 GB each) and leaks them when a run exits early",
+      "path": "~/.codex/.tmp/marketplaces/.staging",
+      "glob": "marketplace-upgrade-*",
+      "minAgeMinutes": 30,
+      "skipIfRunning": "codex exec"
+    },
+    {
+      "tool": "codex",
+      "why": "Codex scratch folders in the system temp directory",
+      "path": "$TMPDIR",
+      "glob": ".com.openai.codex.*",
+      "minAgeMinutes": 60,
+      "skipIfRunning": "codex exec"
+    },
+    {
+      "tool": "quorum",
+      "why": "quorum's own per-run scratch folders (a crashed run can leave one)",
+      "path": "$TMPDIR",
+      "glob": "quorum-*",
+      "minAgeMinutes": 60,
+      "skipIfRunning": "quorum-ask"
+    }
+  ],
+  "watch": {
+    "codex": [
+      "~/.codex"
+    ],
+    "opencode": [
+      "~/.local/share/opencode"
+    ],
+    "claude": [
+      "~/.claude/projects"
+    ],
+    "ollama": [
+      "~/.ollama"
+    ],
+    "aider": [
+      "~/.aider.tags.cache.v4"
+    ]
   }
 }

@@ -20,7 +20,8 @@ Then copy `quorum.example.json` to `~/.config/quorum/quorum.json` and edit the p
 | skill `hygiene` | finds and removes the cache and scratch data agent tools leave behind |
 | `bin/quorum-ask` | runs one model from your config (timeout, free-only guard, session cleanup) |
 | `bin/quorum-probe` | checks which panel models answer right now |
-| `bin/quorum-cleanup` | runs each provider's cleanup command |
+| `bin/quorum-cleanup` | runs each provider's cleanup command and `quorum-doctor --fix` |
+| `bin/quorum-doctor` | the universal cache check: sizes, known leaks, safe `--fix`, `--schedule` |
 
 ## Providers (no setup for the common ones)
 `providers.catalog.json` ships 40 ready-made providers; `quorum-ask <provider> ...` finds them even if your config does not list them. API keys come from environment variables, never from files.
@@ -30,6 +31,14 @@ Then copy `quorum.example.json` to `~/.config/quorum/quorum.json` and edit the p
 - **Other formats:** anthropic-api, gemini-api
 - **Anything odd or self-hosted:** `custom-openai` / `custom-anthropic` read the URL from `QUORUM_CUSTOM_BASE` (and the key from `QUORUM_CUSTOM_KEY`). Or add your own entry to `quorum.json`: a provider is only a command template.
 Only `codex` and `opencode` have been run by the author (`"verified": true`); the others use the vendors' documented flags and URLs, so run `quorum-probe` after adding one. `quorum-http` (standard-library Python) speaks the OpenAI, Anthropic and Gemini wire formats and is tested against a local fake server.
+
+## Cache protection (so quorum never fills your disk)
+AI command-line tools leave data behind: Codex once leaked 42 GB of plugin-marketplace copies, and opencode keeps every session forever. quorum protects you in four layers:
+1. **Private scratch:** every run gets its own `TMPDIR`, deleted when the run ends, so anything a runner parks in the temp folder disappears.
+2. **Disk guard:** `quorum-ask` refuses to start when free disk is below `limits.minFreeGB` (default 3 GB).
+3. **Growth watch:** after each run it measures the runner's data folders (`watch` in the catalog or your config), warns when a single run grew one by more than `limits.growthWarnMB` (default 200 MB) and appends to `~/.local/state/quorum/growth.log`.
+4. **`quorum-doctor`:** lists the known leak spots (`leaks` in the catalog) with sizes; `--fix` deletes only entries that match a listed pattern, are older than the listed age, and whose tool is not running. `--schedule` prints a ready-made hourly launchd/cron job. `quorum-cleanup` runs provider cleanups plus `quorum-doctor --fix`.
+Add your own tool's leaks to `quorum.json` under `"leaks": [{"tool","why","path","glob","minAgeMinutes","skipIfRunning"}]` and `"watch": {"tool": ["~/path"]}`.
 
 ## The free-only guard is a naming filter
 `freeOnly` + `freeNameMatch` makes `quorum-ask` refuse any model whose whole name does not match the pattern (opencode's `-free` models, OpenRouter's `:free`), and a `freeOnly` provider with no pattern refuses everything. It stops typos and accidental paid picks; it cannot know a provider's billing, so check pricing yourself.

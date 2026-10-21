@@ -68,3 +68,30 @@ def pid_alive(pid):
     try: os.kill(int(pid), 0); return True
     except (ProcessLookupError, ValueError): return False
     except PermissionError: return True
+
+def expand(path):
+    return os.path.expandvars(os.path.expanduser(path)).replace("$TMPDIR", os.environ.get("TMPDIR", "/tmp"))
+
+def free_gb(path="/"):
+    import shutil
+    return shutil.disk_usage(path).free / 1e9
+
+def dir_mb(path):
+    """Size of a folder in MB via du (fast, handles huge trees); 0 if it does not exist."""
+    path = expand(path)
+    if not os.path.exists(path): return 0.0
+    try:
+        out = subprocess.run(["du", "-sk", path], capture_output=True, text=True, timeout=60).stdout.split()
+        return int(out[0]) / 1024 if out else 0.0
+    except Exception:
+        return 0.0
+
+def running(pattern):
+    if os.environ.get("QUORUM_ASSUME_IDLE") == "1": return False      # tests only
+    try:
+        return subprocess.run(["pgrep", "-f", pattern], capture_output=True).returncode == 0
+    except FileNotFoundError:
+        return False
+
+def state_dir():
+    d = os.path.expanduser("~/.local/state/quorum"); os.makedirs(d, exist_ok=True); return d

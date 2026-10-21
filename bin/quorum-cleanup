@@ -9,5 +9,7 @@ env = dict(os.environ, QUORUM_BIN=q.HERE)
 for name, p in q.providers(cfg).items():
     c = p.get("cleanup") if isinstance(p, dict) else None
     if isinstance(c, str): q.run_limited(c, env, os.getcwd(), 120)
+subprocess_run = __import__("subprocess").run
+subprocess_run([os.path.join(q.HERE, "quorum-doctor"), "--fix"], stdout=__import__("subprocess").DEVNULL)
 du = shutil.disk_usage("/")
 print(f"free disk: {du.free / 1e9:.0f} GB")

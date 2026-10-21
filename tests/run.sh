@@ -51,5 +51,21 @@ echo "$out" | grep -q "^DOWN chatty/c$" || fail "probe must reject 'NOT OK': $ou
 echo "$out" | grep -q "^DOWN failer/d$" || fail "probe must reject a failing runner: $out"
 
 "$root/bin/quorum-cleanup" >/dev/null || fail "cleanup"
+
+# universal cache protection: disk guard, private per-run TMPDIR, doctor deletes only old matching entries
+QUORUM_MIN_FREE_GB=999999 "$ask" fake m - x "$t/p.md" "$t/o8.txt" "$t" 2>/dev/null; [ $? = 7 ] || fail "disk guard must refuse when disk is too full"
+cat > "$t/q2.json" <<'J'
+{ "providers": { "tmpwriter": { "run": "dd if=/dev/zero of=\"$TMPDIR/big\" bs=1m count=5 2>/dev/null; echo \"$TMPDIR\" > {out}" } } }
+J
+QUORUM_CONFIG="$t/q2.json" "$ask" tmpwriter m - x "$t/p.md" "$t/o9.txt" "$t" || fail "tmpwriter"
+[ ! -e "$(cat "$t/o9.txt")" ] || fail "per-run TMPDIR must be deleted after the run"
+mkdir -p "$t/home/.codex/.tmp/marketplaces/.staging/marketplace-upgrade-old" "$t/home/.codex/.tmp/marketplaces/.staging/marketplace-upgrade-new" "$t/home/.codex/.tmp/marketplaces/.staging/keepme"
+touch -t 202001010000 "$t/home/.codex/.tmp/marketplaces/.staging/marketplace-upgrade-old" "$t/home/.codex/.tmp/marketplaces/.staging/keepme"
+HOME="$t/home" QUORUM_ASSUME_IDLE=1 QUORUM_CONFIG="$t/q2.json" "$root/bin/quorum-doctor" | grep -q "would delete" || fail "doctor dry run should report"
+[ -d "$t/home/.codex/.tmp/marketplaces/.staging/marketplace-upgrade-old" ] || fail "doctor deleted without --fix"
+HOME="$t/home" QUORUM_ASSUME_IDLE=1 QUORUM_CONFIG="$t/q2.json" "$root/bin/quorum-doctor" --fix >/dev/null
+[ ! -e "$t/home/.codex/.tmp/marketplaces/.staging/marketplace-upgrade-old" ] || fail "doctor --fix must delete the old leak"
+[ -d "$t/home/.codex/.tmp/marketplaces/.staging/marketplace-upgrade-new" ] || fail "doctor must keep young entries"
+[ -d "$t/home/.codex/.tmp/marketplaces/.staging/keepme" ] || fail "doctor must keep entries that do not match the pattern"
 python3 "$root/tests/test_quorum_http.py" || fail "http tests"
 echo "PASS"
