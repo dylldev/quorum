@@ -1,0 +1,8 @@
+{
+  "name": "quorum",
+  "version": "0.1.0",
+  "description": "Make several AI models agree before you ship: plan with a strong model, let a panel of free ones do the legwork, verify together. Works with any command-line model, configured in one JSON file.",
+  "author": { "name": "dylldev" },
+  "license": "Apache-2.0",
+  "keywords": ["multi-model", "review", "council", "codex", "opencode", "ollama", "workflow"]
+}

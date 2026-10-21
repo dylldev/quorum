@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# quorum-ask <provider> <model> <effort|-> <tag> <prompt-file> <out-file> [workdir]
+# Runs ONE model through the command template in your quorum.json. Vendor-neutral: the provider is just config.
+set -uo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$here/quorum-lib.sh"
+provider="${1:?provider}"; model="${2:?model}"; effort="${3:--}"; tag="${4:?tag}"; prompt="${5:?prompt file}"; out="${6:?out file}"; workdir="${7:-$PWD}"
+cfg="$(quorum_config)" || { echo "quorum: no config found (copy quorum.example.json to ~/.config/quorum/quorum.json)" >&2; exit 2; }
+tpl="$(quorum_get "$cfg" ".providers[\"$provider\"].run")"; [ -n "$tpl" ] || { echo "quorum: unknown provider $provider" >&2; exit 2; }
+free_only="$(quorum_get "$cfg" ".providers[\"$provider\"].freeOnly")"
+match="$(quorum_get "$cfg" ".providers[\"$provider\"].freeNameMatch")"
+if [ "$free_only" = "true" ] && [ -n "$match" ] && ! printf '%s' "$model" | grep -Eq -- "$match"; then
+  echo "quorum: provider $provider is free-only and '$model' does not match /$match/; refusing" >&2; exit 3
+fi
+needs_empty="$(quorum_get "$cfg" ".providers[\"$provider\"].needsEmptyDir")"
+timeout_s="$(quorum_get "$cfg" ".limits.timeoutSeconds")"; timeout_s="${timeout_s:-900}"
+cmd="${tpl//\{model\}/$model}"; cmd="${cmd//\{effort\}/$effort}"; cmd="${cmd//\{tag\}/$tag-$$}"
+cmd="${cmd//\{prompt\}/$prompt}"; cmd="${cmd//\{out\}/$out}"
+if [ "$needs_empty" = "true" ]; then workdir="$(mktemp -d)"; trap 'rm -rf "$workdir"' EXIT; fi
+( cd "$workdir" && perl -e 'alarm shift; exec @ARGV' "$timeout_s" bash -c "$cmd" )
+rc=$?
+after="$(quorum_get "$cfg" ".providers[\"$provider\"].afterRun")"
+if [ -n "$after" ]; then a="${after//\{tag\}/$tag-$$}"; bash -c "$a" >/dev/null 2>&1 || true; fi
+exit $rc

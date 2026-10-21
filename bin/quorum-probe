@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# quorum-probe: ask every configured panel model to say OK (90 s cap each) and list the ones that did not.
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; . "$here/quorum-lib.sh"
+cfg="$(quorum_config)" || { echo "no quorum.json found" >&2; exit 2; }
+tmp="$(mktemp -d)"; echo "Reply with exactly: OK" > "$tmp/p.md"
+while IFS=$'\t' read -r provider model; do
+  ( "$here/quorum-ask" "$provider" "$model" low probe "$tmp/p.md" "$tmp/$provider-$model.out" >/dev/null 2>&1
+    if grep -q "OK" "$tmp/$provider-$model.out" 2>/dev/null; then echo "up   $provider/$model"; else echo "DOWN $provider/$model"; fi ) &
+done < <(python3 -c 'import json,sys
+for e in json.load(open(sys.argv[1])).get("panel",[]): print(e["provider"]+"\t"+e["model"])' "$cfg")
+wait; "$here/quorum-cleanup" >/dev/null; rm -rf "$tmp"

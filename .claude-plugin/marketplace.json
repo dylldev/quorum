@@ -1,0 +1,7 @@
+{
+  "name": "quorum",
+  "owner": { "name": "dylldev" },
+  "plugins": [
+    { "name": "quorum", "source": "./", "description": "Make several AI models agree before you ship. Configurable, vendor-neutral." }
+  ]
+}

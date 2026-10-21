@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Runs every provider's "cleanup" command from your config, then prints disk numbers. Safe to run any time.
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; . "$here/quorum-lib.sh"
+cfg="$(quorum_config)" || exit 0
+python3 - "$cfg" <<'PY' | while IFS= read -r c; do bash -c "$c" >/dev/null 2>&1 || true; done
+import json,sys
+for p in json.load(open(sys.argv[1])).get("providers",{}).values():
+    if p.get("cleanup"): print(p["cleanup"])
+PY
+echo "free disk: $(df -h / | awk 'NR==2{print $4}')"
