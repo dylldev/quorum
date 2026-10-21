@@ -22,6 +22,15 @@ Then copy `quorum.example.json` to `~/.config/quorum/quorum.json` and edit the p
 | `bin/quorum-probe` | checks which panel models answer right now |
 | `bin/quorum-cleanup` | runs each provider's cleanup command |
 
+## Providers (no setup for the common ones)
+`providers.catalog.json` ships 40 ready-made providers; `quorum-ask <provider> ...` finds them even if your config does not list them. API keys come from environment variables, never from files.
+- **CLIs:** codex, claude, gemini-cli, qwen-code, cursor-agent, copilot-cli, amp, goose, aider, opencode, llm, mods, ollama, llama-cpp
+- **OpenAI-compatible APIs:** openai, openrouter, groq, together, fireworks, deepseek, mistral, xai, cerebras, sambanova, perplexity, nvidia-nim, moonshot-kimi, zhipu-glm, minimax, dashscope-qwen, siliconflow, huggingface
+- **Local servers:** lmstudio, vllm, ollama-http, localai
+- **Other formats:** anthropic-api, gemini-api
+- **Anything odd or self-hosted:** `custom-openai` / `custom-anthropic` read the URL from `QUORUM_CUSTOM_BASE` (and the key from `QUORUM_CUSTOM_KEY`). Or add your own entry to `quorum.json`: a provider is only a command template.
+Only `codex` and `opencode` have been run by the author (`"verified": true`); the others use the vendors' documented flags and URLs, so run `quorum-probe` after adding one. `quorum-http` (standard-library Python) speaks the OpenAI, Anthropic and Gemini wire formats and is tested against a local fake server.
+
 ## Why the free-only guard
 `freeOnly` + `freeNameMatch` on a provider makes `quorum-ask` refuse any model whose name does not match (for example opencode's `-free` models), so a typo can never spend money.
 

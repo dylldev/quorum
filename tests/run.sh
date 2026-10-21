@@ -18,4 +18,5 @@ if "$root/bin/quorum-ask" freeo paid-model - x "$t/p.md" "$t/o2.txt" "$t" 2>/dev
 "$root/bin/quorum-ask" freeo ok-free - x "$t/p.md" "$t/o3.txt" "$t" && grep -q hi "$t/o3.txt" || { echo "FAIL free ok"; exit 1; }
 "$root/bin/quorum-probe" | grep -q "^DOWN fake/m1" && true   # fake output lacks OK: must report DOWN, not crash
 "$root/bin/quorum-cleanup" >/dev/null
+python3 "$root/tests/test_quorum_http.py"
 echo "PASS"

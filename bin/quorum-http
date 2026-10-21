@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+"""quorum-http <format> <base_url> <key_env|-> <model> <prompt_file> <out_file>
+One-shot chat call to any HTTP model API, standard library only. Formats:
+  openai     OpenAI-compatible /chat/completions (OpenAI, OpenRouter, Groq, Together, Fireworks, DeepSeek, Mistral, xAI,
+             Cerebras, Perplexity, NVIDIA NIM, Moonshot, Zhipu, MiniMax, DashScope, SiliconFlow, Hugging Face router,
+             LM Studio, vLLM, LocalAI, llama.cpp server, Ollama /v1 ...)
+  anthropic  Anthropic /v1/messages
+  gemini     Google Generative Language API generateContent
+The API key is read from the environment variable named in <key_env> (use "-" for none). It is never printed or stored.
+"""
+import json, os, sys, urllib.request, urllib.error
+
+def main():
+    if len(sys.argv) != 7:
+        sys.exit(__doc__)
+    fmt, base, key_env, model, prompt_file, out_file = sys.argv[1:]
+    prompt = open(prompt_file, encoding="utf-8").read()
+    key = os.environ.get(key_env, "") if key_env != "-" else ""
+    if key_env != "-" and not key:
+        open(out_file, "w").write(f"quorum-http: environment variable {key_env} is empty\n"); sys.exit(4)
+    if base.startswith("env:"):
+        base = os.environ.get(base[4:], "")
+        if not base:
+            open(out_file, "w").write("quorum-http: base URL environment variable is empty\n"); sys.exit(4)
+    base = base.rstrip("/")
+    headers = {"Content-Type": "application/json"}
+    if fmt == "openai":
+        url = base + "/chat/completions"
+        body = {"model": model, "messages": [{"role": "user", "content": prompt}]}
+        if key: headers["Authorization"] = "Bearer " + key
+        pick = lambda r: r["choices"][0]["message"]["content"]
+    elif fmt == "anthropic":
+        url = base + "/v1/messages"
+        body = {"model": model, "max_tokens": 8192, "messages": [{"role": "user", "content": prompt}]}
+        headers["x-api-key"] = key; headers["anthropic-version"] = "2023-06-01"
+        pick = lambda r: "".join(p.get("text", "") for p in r["content"])
+    elif fmt == "gemini":
+        url = f"{base}/v1beta/models/{model}:generateContent"
+        body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
+        headers["x-goog-api-key"] = key
+        pick = lambda r: "".join(p.get("text", "") for p in r["candidates"][0]["content"]["parts"])
+    else:
+        sys.exit(f"quorum-http: unknown format {fmt}")
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=int(os.environ.get("QUORUM_HTTP_TIMEOUT", "600"))) as resp:
+            text = pick(json.load(resp))
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace")[:500].replace(key, "***") if key else e.read().decode("utf-8", "replace")[:500]
+        open(out_file, "w").write(f"quorum-http: HTTP {e.code} {e.reason}\n{detail}\n"); sys.exit(5)
+    except Exception as e:  # network, bad JSON, missing fields
+        open(out_file, "w").write(f"quorum-http: {type(e).__name__}: {str(e)[:300]}\n"); sys.exit(6)
+    open(out_file, "w", encoding="utf-8").write(text if text.endswith("\n") else text + "\n")
+
+main()

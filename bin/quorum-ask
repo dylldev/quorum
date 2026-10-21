@@ -6,19 +6,22 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/quorum-lib.sh"
 provider="${1:?provider}"; model="${2:?model}"; effort="${3:--}"; tag="${4:?tag}"; prompt="${5:?prompt file}"; out="${6:?out file}"; workdir="${7:-$PWD}"
 cfg="$(quorum_config)" || { echo "quorum: no config found (copy quorum.example.json to ~/.config/quorum/quorum.json)" >&2; exit 2; }
-tpl="$(quorum_get "$cfg" ".providers[\"$provider\"].run")"; [ -n "$tpl" ] || { echo "quorum: unknown provider $provider" >&2; exit 2; }
-free_only="$(quorum_get "$cfg" ".providers[\"$provider\"].freeOnly")"
-match="$(quorum_get "$cfg" ".providers[\"$provider\"].freeNameMatch")"
+catalog="$here/../providers.catalog.json"
+# A provider is read from your config first, then from the built-in catalog (so `groq` or `gemini-api` work with no setup).
+pget() { local v; v="$(quorum_get "$cfg" ".providers[\"$provider\"].$1")"; [ -z "$v" ] && [ -f "$catalog" ] && v="$(quorum_get "$catalog" ".providers[\"$provider\"].$1")"; printf '%s' "$v"; }
+tpl="$(pget run)"; [ -n "$tpl" ] || { echo "quorum: unknown provider $provider (not in your config or providers.catalog.json)" >&2; exit 2; }
+free_only="$(pget freeOnly)"
+match="$(pget freeNameMatch)"
 if [ "$free_only" = "true" ] && [ -n "$match" ] && ! printf '%s' "$model" | grep -Eq -- "$match"; then
   echo "quorum: provider $provider is free-only and '$model' does not match /$match/; refusing" >&2; exit 3
 fi
-needs_empty="$(quorum_get "$cfg" ".providers[\"$provider\"].needsEmptyDir")"
+needs_empty="$(pget needsEmptyDir)"
 timeout_s="$(quorum_get "$cfg" ".limits.timeoutSeconds")"; timeout_s="${timeout_s:-900}"
 cmd="${tpl//\{model\}/$model}"; cmd="${cmd//\{effort\}/$effort}"; cmd="${cmd//\{tag\}/$tag-$$}"
-cmd="${cmd//\{prompt\}/$prompt}"; cmd="${cmd//\{out\}/$out}"
+cmd="${cmd//\{prompt\}/$prompt}"; cmd="${cmd//\{out\}/$out}"; cmd="${cmd//\{bin\}/$here}"; cmd="${cmd//\{bin\}/$here}"
 if [ "$needs_empty" = "true" ]; then workdir="$(mktemp -d)"; trap 'rm -rf "$workdir"' EXIT; fi
 ( cd "$workdir" && perl -e 'alarm shift; exec @ARGV' "$timeout_s" bash -c "$cmd" )
 rc=$?
-after="$(quorum_get "$cfg" ".providers[\"$provider\"].afterRun")"
+after="$(pget afterRun)"
 if [ -n "$after" ]; then a="${after//\{tag\}/$tag-$$}"; bash -c "$a" >/dev/null 2>&1 || true; fi
 exit $rc

@@ -1,0 +1,184 @@
+{
+  "_comment": "Ready-made providers. quorum-ask looks here when your quorum.json does not define the provider, so `groq` or `gemini` work without copying. Keys come from environment variables, never from files. `verified` says whether this exact line has been run by the author; false means: standard API/flags per the vendor's docs, test with quorum-probe.",
+  "providers": {
+    "codex": {
+      "run": "codex exec -m {model} -c model_reasoning_effort={effort} -s read-only --ephemeral --skip-git-repo-check --disable plugins -o {out} \"$(cat {prompt})\" < /dev/null > /dev/null 2>&1",
+      "needsEmptyDir": true,
+      "verified": true,
+      "cleanup": "find \"$HOME/.codex/.tmp/marketplaces/.staging\" -maxdepth 1 -name 'marketplace-upgrade-*' -mmin +10 -exec rm -rf {} + 2>/dev/null"
+    },
+    "opencode": {
+      "run": "opencode run -m opencode/{model} --title quorum-{tag} \"$(cat {prompt})\" > {out} 2>&1",
+      "freeOnly": true,
+      "freeNameMatch": "-free$",
+      "verified": true,
+      "afterRun": "id=$(opencode session list 2>/dev/null | awk -v t=quorum-{tag} '$0 ~ t {print $1; exit}'); [ -n \"$id\" ] && opencode session delete \"$id\" >/dev/null 2>&1",
+      "cleanup": "opencode session list 2>/dev/null | awk '/quorum-/ {print $1}' | while read -r id; do opencode session delete \"$id\" >/dev/null 2>&1; done"
+    },
+    "claude": {
+      "run": "claude -p --model {model} \"$(cat {prompt})\" > {out} 2>/dev/null < /dev/null",
+      "verified": false
+    },
+    "gemini-cli": {
+      "run": "gemini -m {model} -p \"$(cat {prompt})\" > {out} 2>/dev/null < /dev/null",
+      "verified": false
+    },
+    "qwen-code": {
+      "run": "qwen -m {model} -p \"$(cat {prompt})\" > {out} 2>/dev/null < /dev/null",
+      "verified": false
+    },
+    "cursor-agent": {
+      "run": "cursor-agent -p --model {model} \"$(cat {prompt})\" > {out} 2>/dev/null < /dev/null",
+      "verified": false
+    },
+    "copilot-cli": {
+      "run": "copilot -p \"$(cat {prompt})\" --model {model} > {out} 2>/dev/null < /dev/null",
+      "verified": false
+    },
+    "amp": {
+      "run": "amp -x \"$(cat {prompt})\" > {out} 2>/dev/null < /dev/null",
+      "verified": false,
+      "note": "model is chosen by Amp, {model} is ignored"
+    },
+    "goose": {
+      "run": "goose run -t \"$(cat {prompt})\" > {out} 2>/dev/null < /dev/null",
+      "verified": false,
+      "note": "provider and model come from goose's own config or GOOSE_* env vars"
+    },
+    "aider": {
+      "run": "aider --model {model} --chat-mode ask --message-file {prompt} --no-git --yes-always > {out} 2>/dev/null < /dev/null",
+      "verified": false
+    },
+    "llm": {
+      "run": "llm -m {model} < {prompt} > {out} 2>/dev/null",
+      "verified": false,
+      "note": "Simon Willison's llm: its plugins reach Bedrock, Vertex, Cohere and many more"
+    },
+    "mods": {
+      "run": "mods -m {model} < {prompt} > {out} 2>/dev/null",
+      "verified": false
+    },
+    "ollama": {
+      "run": "ollama run {model} < {prompt} > {out} 2>/dev/null",
+      "freeOnly": true,
+      "freeNameMatch": ".",
+      "verified": false,
+      "note": "local models cost nothing"
+    },
+    "llama-cpp": {
+      "run": "llama-cli -m {model} -f {prompt} -n 2048 --no-display-prompt > {out} 2>/dev/null < /dev/null",
+      "verified": false,
+      "note": "{model} is a path to a .gguf file"
+    },
+    "openai": {
+      "run": "{bin}/quorum-http openai https://api.openai.com/v1 OPENAI_API_KEY {model} {prompt} {out}",
+      "verified": false
+    },
+    "openrouter": {
+      "run": "{bin}/quorum-http openai https://openrouter.ai/api/v1 OPENROUTER_API_KEY {model} {prompt} {out}",
+      "freeOnly": true,
+      "freeNameMatch": ":free$",
+      "note": "freeOnly: only models ending in :free",
+      "verified": false
+    },
+    "groq": {
+      "run": "{bin}/quorum-http openai https://api.groq.com/openai/v1 GROQ_API_KEY {model} {prompt} {out}",
+      "verified": false
+    },
+    "together": {
+      "run": "{bin}/quorum-http openai https://api.together.xyz/v1 TOGETHER_API_KEY {model} {prompt} {out}",
+      "verified": false
+    },
+    "fireworks": {
+      "run": "{bin}/quorum-http openai https://api.fireworks.ai/inference/v1 FIREWORKS_API_KEY {model} {prompt} {out}",
+      "verified": false
+    },
+    "deepseek": {
+      "run": "{bin}/quorum-http openai https://api.deepseek.com DEEPSEEK_API_KEY {model} {prompt} {out}",
+      "verified": false
+    },
+    "mistral": {
+      "run": "{bin}/quorum-http openai https://api.mistral.ai/v1 MISTRAL_API_KEY {model} {prompt} {out}",
+      "verified": false
+    },
+    "xai": {
+      "run": "{bin}/quorum-http openai https://api.x.ai/v1 XAI_API_KEY {model} {prompt} {out}",
+      "verified": false
+    },
+    "cerebras": {
+      "run": "{bin}/quorum-http openai https://api.cerebras.ai/v1 CEREBRAS_API_KEY {model} {prompt} {out}",
+      "verified": false
+    },
+    "sambanova": {
+      "run": "{bin}/quorum-http openai https://api.sambanova.ai/v1 SAMBANOVA_API_KEY {model} {prompt} {out}",
+      "verified": false
+    },
+    "perplexity": {
+      "run": "{bin}/quorum-http openai https://api.perplexity.ai PERPLEXITY_API_KEY {model} {prompt} {out}",
+      "verified": false
+    },
+    "nvidia-nim": {
+      "run": "{bin}/quorum-http openai https://integrate.api.nvidia.com/v1 NVIDIA_API_KEY {model} {prompt} {out}",
+      "verified": false
+    },
+    "moonshot-kimi": {
+      "run": "{bin}/quorum-http openai https://api.moonshot.ai/v1 MOONSHOT_API_KEY {model} {prompt} {out}",
+      "verified": false
+    },
+    "zhipu-glm": {
+      "run": "{bin}/quorum-http openai https://open.bigmodel.cn/api/paas/v4 ZHIPU_API_KEY {model} {prompt} {out}",
+      "verified": false
+    },
+    "minimax": {
+      "run": "{bin}/quorum-http openai https://api.minimax.io/v1 MINIMAX_API_KEY {model} {prompt} {out}",
+      "verified": false
+    },
+    "dashscope-qwen": {
+      "run": "{bin}/quorum-http openai https://dashscope-intl.aliyuncs.com/compatible-mode/v1 DASHSCOPE_API_KEY {model} {prompt} {out}",
+      "verified": false
+    },
+    "siliconflow": {
+      "run": "{bin}/quorum-http openai https://api.siliconflow.com/v1 SILICONFLOW_API_KEY {model} {prompt} {out}",
+      "verified": false
+    },
+    "huggingface": {
+      "run": "{bin}/quorum-http openai https://router.huggingface.co/v1 HF_TOKEN {model} {prompt} {out}",
+      "verified": false
+    },
+    "lmstudio": {
+      "run": "{bin}/quorum-http openai http://localhost:1234/v1 - {model} {prompt} {out}",
+      "note": "LM Studio local server",
+      "verified": false
+    },
+    "vllm": {
+      "run": "{bin}/quorum-http openai http://localhost:8000/v1 - {model} {prompt} {out}",
+      "verified": false
+    },
+    "ollama-http": {
+      "run": "{bin}/quorum-http openai http://localhost:11434/v1 - {model} {prompt} {out}",
+      "verified": false
+    },
+    "localai": {
+      "run": "{bin}/quorum-http openai http://localhost:8080/v1 - {model} {prompt} {out}",
+      "verified": false
+    },
+    "anthropic-api": {
+      "run": "{bin}/quorum-http anthropic https://api.anthropic.com ANTHROPIC_API_KEY {model} {prompt} {out}",
+      "verified": false
+    },
+    "gemini-api": {
+      "run": "{bin}/quorum-http gemini https://generativelanguage.googleapis.com GEMINI_API_KEY {model} {prompt} {out}",
+      "verified": false
+    },
+    "custom-openai": {
+      "run": "{bin}/quorum-http openai env:QUORUM_CUSTOM_BASE QUORUM_CUSTOM_KEY {model} {prompt} {out}",
+      "note": "Any OpenAI-compatible server: export QUORUM_CUSTOM_BASE=https://host/v1 and QUORUM_CUSTOM_KEY=... (leave the key unset only if the server needs none: use key env name - in your own provider entry)",
+      "verified": false
+    },
+    "custom-anthropic": {
+      "run": "{bin}/quorum-http anthropic env:QUORUM_CUSTOM_BASE QUORUM_CUSTOM_KEY {model} {prompt} {out}",
+      "note": "Anthropic-format proxy at QUORUM_CUSTOM_BASE",
+      "verified": false
+    }
+  }
+}
