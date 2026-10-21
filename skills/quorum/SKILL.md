@@ -9,7 +9,7 @@ One model can be confidently wrong. Several different models, checked against th
 
 ## Setup (once)
 Copy `quorum.example.json` to `~/.config/quorum/quorum.json` (a project `./quorum.json` is only read with `QUORUM_TRUST_PROJECT=1`). It has three parts:
-- **providers**: a command template per model runner (`{model} {effort} {prompt} {out} {tag}` are filled in). Add any CLI: Codex, opencode, `claude -p`, ollama, llama.cpp, a curl wrapper. `freeOnly` plus `freeNameMatch` refuses models whose whole name does not match (a naming filter, not a billing guarantee).
+- **providers**: a command template per model runner (`{model} {effort} {prompt} {out} {tag}` are filled in). Add any CLI: Codex, opencode, `claude -p`, ollama, llama.cpp, a curl wrapper. Nothing is forced to be free. If the user wants a no-spend rule they set `freeOnly` (all providers) or `freeOnlyProviders` in the config; `freeNameMatch` then refuses models whose whole name does not match (a naming filter, not a billing guarantee). Respect whatever the config says; never turn the rule on or off yourself.
 - **moments**: which model to use when (`bigDecision`, `plan`, `reviewDiff`, `quickCheck`). Put the strongest model on the rare big decisions, a solid workhorse on plans and diff reviews, a fast cheap one on quick checks.
 - **panel**: the cheap or free models, each with a role (implement, review, audit). Keep at least `limits.minPanelSize` different ones.
 

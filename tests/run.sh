@@ -7,6 +7,7 @@ cat > "$t/quorum.json" <<'J'
 { "providers": {
     "fake":  { "run": "echo \"{model}|{effort}|{tag}|$(cat {prompt})\" > {out}", "afterRun": "echo ran > \"$QUORUM_TEST_MARK\"" },
     "freeo": { "run": "echo hi > {out}", "freeOnly": true, "freeNameMatch": ".*-free" },
+    "plain": { "run": "echo hi > {out}", "freeNameMatch": ".*-free" }, "localfree": { "run": "echo hi > {out}", "free": true },
     "nomatch": { "run": "echo hi > {out}", "freeOnly": true },
     "sleepy": { "run": "sleep 30 & echo $! > \"$QUORUM_TEST_PIDFILE\"; wait" },
     "okbot": { "run": "echo OK > {out}" }, "chatty": { "run": "echo 'NOT OK, sorry' > {out}" }, "failer": { "run": "echo OK > {out}; exit 3" } },
@@ -32,6 +33,15 @@ grep -q '^m1|high|tag1-[0-9]*|hello$' "$t/out.txt" || fail "substitution: $(cat 
 "$ask" freeo paid-model - x "$t/p.md" "$t/o2.txt" "$t" 2>/dev/null && fail "free guard let a paid-looking name through"
 "$ask" freeo 'ok-free' - x "$t/p.md" "$t/o3.txt" "$t" && grep -q hi "$t/o3.txt" || fail "free model refused"
 "$ask" nomatch anything - x "$t/p.md" "$t/o4.txt" "$t" 2>/dev/null && fail "freeOnly without a filter must refuse"
+
+# the rule is optional: off by default, switchable globally or per provider, local runners always pass
+"$ask" plain paid-model - x "$t/p.md" "$t/o10.txt" "$t" || fail "free rule must be OFF by default"
+echo '{"freeOnly": true, "providers": {"plain": {"run": "echo hi > {out}", "freeNameMatch": ".*-free"}, "localfree": {"run": "echo hi > {out}", "free": true}}}' > "$t/q3.json"
+QUORUM_CONFIG="$t/q3.json" "$ask" plain paid-model - x "$t/p.md" "$t/o11.txt" "$t" 2>/dev/null && fail "global freeOnly must refuse"
+QUORUM_CONFIG="$t/q3.json" "$ask" plain ok-free - x "$t/p.md" "$t/o12.txt" "$t" || fail "global freeOnly must allow free names"
+QUORUM_CONFIG="$t/q3.json" "$ask" localfree anything - x "$t/p.md" "$t/o13.txt" "$t" || fail "local free runners always pass"
+echo '{"freeOnlyProviders": ["plain"], "providers": {"plain": {"run": "echo hi > {out}", "freeNameMatch": ".*-free"}}}' > "$t/q4.json"
+QUORUM_CONFIG="$t/q4.json" "$ask" plain paid-model - x "$t/p.md" "$t/o14.txt" "$t" 2>/dev/null && fail "freeOnlyProviders must refuse"
 
 # timeout kills the whole process group (no orphaned children)
 QUORUM_TIMEOUT=2 "$ask" sleepy m - x "$t/p.md" "$t/o5.txt" "$t" 2>/dev/null; rc=$?

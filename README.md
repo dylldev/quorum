@@ -4,12 +4,22 @@ Make several AI models agree before you ship.
 
 Plan with a strong model, let a panel of cheaper or free models do the legwork, check everything against the real code, and loop until you and the strong model agree. Vendor-neutral: every model runner is a command template in one JSON file (Codex, opencode, `claude -p`, Ollama, anything with a CLI).
 
-## Install (Claude Code)
+## Install
+
+### In Claude Code (two commands)
 ```
 /plugin marketplace add dylldev/quorum
 /plugin install quorum@quorum
 ```
-Then copy `quorum.example.json` to `~/.config/quorum/quorum.json` and edit the providers, moments and panel to the tools you have. Run `bin/quorum-probe` to see which panel models are alive.
+Then ask Claude: "set up quorum for me" (it follows the prompt below), or do it by hand: copy `quorum.example.json` to `~/.config/quorum/quorum.json`, edit the providers, moments and panel to the models you actually use, and run `quorum-probe`.
+
+### With any AI agent: paste this prompt
+> Install and configure the quorum plugin from https://github.com/dylldev/quorum for me. Steps: (1) `git clone https://github.com/dylldev/quorum ~/quorum` (or update it if it exists). (2) Put `~/quorum/bin` on my PATH (symlink `quorum-ask`, `quorum-probe`, `quorum-cleanup`, `quorum-doctor` into a folder on PATH such as `~/.local/bin`). (3) Look at which AI command-line tools and API keys I have (`codex`, `claude`, `gemini`, `opencode`, `ollama`, `aider`, environment variables like `OPENAI_API_KEY`) and list them to me; never print or store key values. (4) Copy `~/quorum/quorum.example.json` to `~/.config/quorum/quorum.json` and edit `moments` and `panel` so they use only models I really have access to, at least 3 different panel models. Do NOT turn on the free-only rule unless I ask for it. (5) Run `quorum-probe` and tell me which models answered. (6) Run `bash ~/quorum/tests/run.sh` and report the result. (7) If you are Claude Code, tell me to run `/plugin marketplace add dylldev/quorum` and `/plugin install quorum@quorum`; if you are another agent, copy the four `SKILL.md` files from `~/quorum/skills/*/` into the place you read skills or instructions from. Ask me before changing anything outside `~/quorum`, `~/.config/quorum` and the PATH folder.
+
+The same prompt is in [`INSTALL-PROMPT.md`](INSTALL-PROMPT.md).
+
+### Your models, your rules
+Nothing is forced. Use paid or free models, local or hosted, any vendor. If you *want* a no-spend rule, turn it on yourself: `"freeOnly": true` (all providers) or `"freeOnlyProviders": ["opencode"]` in `quorum.json`; see `quorum.free-only.example.json`.
 
 ## What is in it
 | Piece | What it does |
@@ -40,8 +50,8 @@ AI command-line tools leave data behind: Codex once leaked 42 GB of plugin-marke
 4. **`quorum-doctor`:** lists the known leak spots (`leaks` in the catalog) with sizes; `--fix` deletes only entries that match a listed pattern, are older than the listed age, and whose tool is not running. `--schedule` prints a ready-made hourly launchd/cron job. `quorum-cleanup` runs provider cleanups plus `quorum-doctor --fix`.
 Add your own tool's leaks to `quorum.json` under `"leaks": [{"tool","why","path","glob","minAgeMinutes","skipIfRunning"}]` and `"watch": {"tool": ["~/path"]}`.
 
-## The free-only guard is a naming filter
-`freeOnly` + `freeNameMatch` makes `quorum-ask` refuse any model whose whole name does not match the pattern (opencode's `-free` models, OpenRouter's `:free`), and a `freeOnly` provider with no pattern refuses everything. It stops typos and accidental paid picks; it cannot know a provider's billing, so check pricing yourself.
+## The optional free-only rule is a naming filter
+When you turn it on (see above), `freeNameMatch` makes `quorum-ask` refuse any model whose whole name does not match the pattern (opencode's `-free` models, OpenRouter's `:free`), and a `freeOnly` provider with no pattern refuses everything. It stops typos and accidental paid picks; it cannot know a provider's billing, so check pricing yourself.
 
 ## Security notes
 - Model names, efforts and tags are checked against a strict character set and reach the command as environment variables, never as shell source.

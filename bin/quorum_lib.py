@@ -46,12 +46,14 @@ def shell_template(tpl):
     for ph, var in PLACEHOLDERS.items(): tpl = tpl.replace(ph, f'"${var}"')
     return tpl
 
-def free_ok(provider_cfg, model):
-    """freeOnly is a NAMING filter, not a billing guarantee: the model name must match freeNameMatch in full."""
-    if not provider_cfg.get("freeOnly"): return True
+def free_ok(cfg, name, provider_cfg, model):
+    """Optional rule, off by default. Active when the provider has freeOnly, the config has freeOnly:true, or the provider is
+    listed in freeOnlyProviders. It is a NAMING filter, not a billing guarantee: the whole model name must match freeNameMatch.
+    Providers marked "free": true (local runners) always pass."""
+    required = bool(provider_cfg.get("freeOnly")) or bool(cfg.get("freeOnly")) or name in (cfg.get("freeOnlyProviders") or [])
+    if not required or provider_cfg.get("free"): return True
     pat = provider_cfg.get("freeNameMatch")
-    if not pat: return False
-    return re.fullmatch(pat if pat.startswith("^") or ".*" in pat or pat == "." else ".*" + pat, model) is not None
+    return bool(pat) and re.fullmatch(pat, model) is not None
 
 def run_limited(cmd, env, cwd, timeout):
     """Run `bash -c cmd` in its own process group; on timeout kill the whole group. Returns the exit code (124 on timeout)."""

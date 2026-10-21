@@ -19,7 +19,7 @@ def main():
     cfg = q.load_json(q.find_config())
     pcfg = q.providers(cfg).get(provider)
     if not isinstance(pcfg, dict) or not isinstance(pcfg.get("run"), str): q.die(f"unknown or invalid provider {provider!r}")
-    if not q.free_ok(pcfg, model): q.die(f"provider {provider} is free-only and {model!r} does not match its free-name filter; refusing", 3)
+    if not q.free_ok(cfg, provider, pcfg, model): q.die(f"provider {provider} is under the free-only rule and {model!r} does not match its free-name filter; refusing", 3)
     timeout = int(os.environ.get("QUORUM_TIMEOUT") or cfg.get("limits", {}).get("timeoutSeconds", 900))
     # Disk guard: refuse to start a run when the disk is nearly full (a full disk breaks every tool on the machine).
     min_free = float(os.environ.get("QUORUM_MIN_FREE_GB") or cfg.get("limits", {}).get("minFreeGB", 3))

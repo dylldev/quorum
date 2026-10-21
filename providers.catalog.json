@@ -1,5 +1,5 @@
 {
-  "_comment": "Ready-made providers. quorum-ask looks here when your quorum.json does not define the provider, so `groq` or `gemini` work without copying. Keys come from environment variables, never from files. `verified` says whether this exact line has been run by the author; false means: standard API/flags per the vendor's docs, test with quorum-probe.",
+  "_comment": "Ready-made providers. quorum-ask looks here when your quorum.json does not define the provider, so `groq` or `gemini` work without copying. Keys come from environment variables, never from files. `verified` says whether this exact line has been run by the author; false means: standard API/flags per the vendor's docs, test with quorum-probe. Nothing here forces free models. Turn the free-only rule on yourself: top-level \"freeOnly\": true in quorum.json (all providers) or \"freeOnlyProviders\": [\"opencode\"] (just those). Providers with \"free\": true run locally and always pass.",
   "providers": {
     "codex": {
       "run": "codex exec -m {model} -c model_reasoning_effort={effort} -s read-only --ephemeral --skip-git-repo-check --disable plugins -o {out} \"$(cat {prompt})\" < /dev/null > /dev/null 2>&1",
@@ -9,7 +9,7 @@
     },
     "opencode": {
       "run": "opencode run -m opencode/{model} --title quorum-{tag} \"$(cat {prompt})\" < /dev/null > {out} 2>&1",
-      "freeOnly": true,
+      "freeOnly": false,
       "freeNameMatch": ".*-free",
       "verified": true,
       "afterRun": "id=$(opencode session list 2>/dev/null | awk -v t=quorum-{tag} '$0 ~ t {print $1; exit}'); [ -n \"$id\" ] && opencode session delete \"$id\" >/dev/null 2>&1",
@@ -60,15 +60,15 @@
     },
     "ollama": {
       "run": "ollama run {model} < {prompt} > {out} 2>/dev/null",
-      "freeOnly": true,
-      "freeNameMatch": ".+",
       "verified": false,
-      "note": "local models cost nothing"
+      "note": "local models cost nothing",
+      "free": true
     },
     "llama-cpp": {
       "run": "llama-cli -m {model} -f {prompt} -n 2048 --no-display-prompt > {out} 2>/dev/null < /dev/null",
       "verified": false,
-      "note": "{model} is a path to a .gguf file"
+      "note": "{model} is a path to a .gguf file",
+      "free": true
     },
     "openai": {
       "run": "{bin}/quorum-http openai https://api.openai.com/v1 OPENAI_API_KEY {model} {prompt} {out}",
@@ -76,7 +76,7 @@
     },
     "openrouter": {
       "run": "{bin}/quorum-http openai https://openrouter.ai/api/v1 OPENROUTER_API_KEY {model} {prompt} {out}",
-      "freeOnly": true,
+      "freeOnly": false,
       "freeNameMatch": ":free$",
       "note": "freeOnly: only models ending in :free",
       "verified": false
@@ -148,19 +148,23 @@
     "lmstudio": {
       "run": "{bin}/quorum-http openai http://localhost:1234/v1 - {model} {prompt} {out}",
       "note": "LM Studio local server",
-      "verified": false
+      "verified": false,
+      "free": true
     },
     "vllm": {
       "run": "{bin}/quorum-http openai http://localhost:8000/v1 - {model} {prompt} {out}",
-      "verified": false
+      "verified": false,
+      "free": true
     },
     "ollama-http": {
       "run": "{bin}/quorum-http openai http://localhost:11434/v1 - {model} {prompt} {out}",
-      "verified": false
+      "verified": false,
+      "free": true
     },
     "localai": {
       "run": "{bin}/quorum-http openai http://localhost:8080/v1 - {model} {prompt} {out}",
-      "verified": false
+      "verified": false,
+      "free": true
     },
     "anthropic-api": {
       "run": "{bin}/quorum-http anthropic https://api.anthropic.com ANTHROPIC_API_KEY {model} {prompt} {out}",
