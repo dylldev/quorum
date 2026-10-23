@@ -47,7 +47,7 @@
   "panel": [
     {
       "provider": "opencode",
-      "model": "minimax-m3.1-flash-free",
+      "model": "beam-free",
       "role": "implement"
     },
     {
